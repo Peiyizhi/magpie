@@ -4768,6 +4768,19 @@ func codexClientHeader(k string) bool {
 // written, when the provider serves the model on another of its endpoints
 // but not this one.
 func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.Provider, proto provider.Protocol, model string, body []byte, u *Usage) (status int, msg string, done bool) {
+	// Native requests need the same conversation key as translated ones.
+	// An explicit field, extraBody or Codex's as-sent choice stays the user's.
+	if (proto == provider.Chat || proto == provider.Responses) && ownCacheKey(p) &&
+		s.fits(p.ID, cacheKeyField, proto) && !gjson.GetBytes(body, cacheKeyField).Exists() &&
+		!(proto == provider.Responses && codexAsSent(p, r.Header)) {
+		req := &Request{}
+		if sessionOf(r.Header) == "" {
+			req, _ = parseIn(proto, body, true)
+		}
+		if req != nil {
+			body = withFields(body, map[string]any{cacheKeyField: cacheKeyOf(r.Header, req)})
+		}
+	}
 	upstream := provider.UpstreamNameIn(wiresOf(r.Context()), p.ID, model)
 	body = rewriteModel(body, upstream)
 	if proto == provider.Responses {
@@ -6348,7 +6361,7 @@ func loadsInPlace(p provider.Provider) bool {
 // upstream; a provider that refused it is remembered under it in unfit.
 const cacheKeyField = "prompt_cache_key"
 
-// ownCacheKey says a request translated for p goes with a prompt cache
+// ownCacheKey says a request sent to p goes with a prompt cache
 // key for its conversation when the client sent none (an Anthropic
 // client's never has one): OpenAI's API routes a conversation by it to
 // where its prompt is cached, and a relay in front of it can refuse a
@@ -6359,8 +6372,8 @@ const cacheKeyField = "prompt_cache_key"
 // CLI sends it), a plugin, Bedrock and Vertex are sent nothing they didn't
 // get before, nor is a provider whose extraBody names the field: the
 // user's value is the one sent. One whose 400 names the field is asked again without it and
-// not sent it again (forwardTranslated); another 400 is not retried for
-// it.
+// not sent it again (forwardTranslated, passthrough); another 400 is not
+// retried for it.
 func ownCacheKey(p provider.Provider) bool {
 	if p.Account != nil || p.IsPlugin() || p.IsBedrock() || p.IsVertex() {
 		return false
@@ -6458,7 +6471,7 @@ func refusedOptional(status int, msg, body []byte) []string {
 }
 
 var unknownOptionalField = regexp.MustCompile("(?i)\\b(?:unknown (?:name|field|parameter)|unsupported (?:parameter|field|property|argument)|unrecognized (?:request )?(?:argument|parameter)(?: supplied)?):?\\s*['\"\\x60]([a-z_]+)['\"\\x60]")
-var unquotedUnsupportedOptionalField = regexp.MustCompile("(?i)\\bunsupported (?:parameter|field|property|argument):\\s*([a-z_]+)\\b")
+var unquotedUnsupportedOptionalField = regexp.MustCompile("(?i)\\b(?:unsupported (?:parameter|field|property|argument)|unrecognized (?:request )?(?:argument|parameter)(?: supplied)?):\\s*([a-z_]+)\\b")
 var rejectedOptionalField = regexp.MustCompile("(?i)(?:^|\\b(?:parameter|field|property|argument)\\s+)['\"\\x60]([a-z_]+)['\"\\x60]\\s+(?:is\\s+)?(?:unsupported|not supported)\\b")
 
 // leadingRejectedOptionalField is a message that starts with the field's
