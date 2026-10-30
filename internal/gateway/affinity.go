@@ -836,8 +836,9 @@ func unanswered(key string, c candidate) {
 // item rs_… could not be verified", invalid_encrypted_content; xAI's
 // (Grok's API and a SuperGrok account alike) "Could not decrypt the
 // provided encrypted_content. Ensure the value is the unmodified
-// encrypted_content from a previous response."
-var foreignReasoning = regexp.MustCompile(`(?i)invalid_encrypted_content|encrypted[ _]content.{0,80}could not be (verified|decrypted)|could not (decrypt|verify).{0,40}encrypted[ _]content`)
+// encrypted_content from a previous response." Azure also refuses a sealed
+// item created under a different Azure OpenAI resource without naming its id.
+var foreignReasoning = regexp.MustCompile(`(?i)invalid_encrypted_content|encrypted[ _]content.{0,80}could not be (verified|decrypted)|could not (decrypt|verify).{0,40}encrypted[ _]content|the requested item was created under a different Azure OpenAI resource`)
 
 // refusedSeals remembers, per conversation and the key or account that
 // refused it, the sealed reasoning another one wrote. Codex hands every

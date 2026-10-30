@@ -1410,6 +1410,23 @@ included). `previousResponse` in
   request is still read and masked whole on this computer before the
   delta is cut.
 
+## Reasoning From Another Azure Resource
+
+A Responses relay can return "The requested item was created under a different
+Azure OpenAI resource" when an earlier turn's sealed reasoning reaches another
+resource. `foreignReasoning` in [`affinity.go`](../../internal/gateway/affinity.go)
+recognizes this refusal, both as an HTTP error and before a streamed reply has
+started delivering content. The existing recovery path retries without the
+reasoning items, preserving the messages, tool calls, tool results and cache key.
+Later requests in that conversation leave out the seals that resource refused;
+new reasoning from the resource still goes along. Native compaction's writer
+constraints stay in force. Unrelated resource, authentication and quota errors
+are not classified as foreign reasoning.
+
+`TestAzureResourceReasoningRecovery` checks both error forms, history preservation
+and the next turn. `TestAzureResourceReasoningWords` keeps unrelated Azure errors
+out of this recovery path.
+
 ## Verification
 
 ```sh
